@@ -1,10 +1,74 @@
-\documentclass{article}
-\title{The Title}
-\author{A. Author}
-\date{\today}
+\documentclass[12pt,a4paper]{report}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    filecolor=blue,
+    urlcolor=blue,
+}
+
+% Title Page
 \begin{document}
-\maketitle
-\begin{abstract}
-Abstract goes here \ldots
-\end{abstract}
+\begin{titlepage}
+    \begin{center}
+        \vspace*{1in}
+
+        {\Huge \textbf{Title}}\\[1cm]
+        {\LARGE Subtitle}\\[1.5cm]
+        
+        \textbf{Serena Patel}\\[1cm]
+        A dissertation submitted in partial fulfillment of the requirements for the degree of\\
+        \textit{BSc. Computer Science (Digital and Technology Solutions)}\\[0.5cm]
+        
+        \textbf{University of Leeds}\\[0.5cm]
+        \textbf{School of Computer Science}\\[0.5cm]
+        
+        \textbf{April, 2025}\\[2cm]
+        
+        Supervisor: Dr Sarah Fores\\
+        Assessor: Dr James Dyer
+
+        \vfill
+    \end{center}
+\end{titlepage}
+
+% Acknowledgments
+\chapter*{Acknowledgments}
+\addcontentsline{toc}{chapter}{Acknowledgments}
+Your acknowledgments text here.
+
+% Abstract
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+Your abstract text here.~\cite{Jacobson1999Towards}
+
+% Table of Contents
+\tableofcontents
+\newpage
+
+% Chapters
+\chapter{Introduction}
+Your introduction here.
+
+\chapter{Literature Review}
+Your literature review here.
+
+\chapter{Methodology}
+Your methodology here.
+
+\chapter{Results and Discussion}
+Your results and discussion here.
+
+\chapter{Conclusion}
+Your conclusion here.
+
+% References
+\addcontentsline{toc}{chapter}{Bibliography}
+\bibliographystyle{plain}
+\bibliography{references}
+
+
 \end{document}

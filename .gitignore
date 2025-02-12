@@ -1,8 +1,12 @@
 /venv
-draft1.aux
-draft1.fdb_latexmk
-draft1.fls
-draft1.log
-draft1.pdf
-draft1.synctex.gz
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.pdf
+*.synctex.gz
+*.toc
+*.out
+*.blg
+*.bbl
 
