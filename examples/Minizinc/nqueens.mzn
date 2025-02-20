@@ -7,3 +7,4 @@ include "alldifferent.mzn";
 constraint alldifferent(q);
 constraint alldifferent(i in 1..n)(q[i] + i);
 constraint alldifferent(i in 1..n)(q[i] - i);
+
