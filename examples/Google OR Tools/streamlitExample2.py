@@ -47,6 +47,10 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         
         df_styled = df.style.applymap(highlight_cells).apply(highlight_diff, axis=None, other=df2)
 
+        print(f"Hamming Distance: {self.getHammingDistance(solutionArray, self._preference_matrix)}")
+
+
+
         st.session_state.solution_array.append((df_styled,df))
         print(st.session_state.solution_array)
 
@@ -54,6 +58,13 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         if self._solution_count >= self._solution_limit:
             print(f"Stop search after {self._solution_limit} solutions")
             self.stop_search()
+
+    def getMetrics(self, allocation, preferences):
+
+        hamming_distance = np.sum(np.abs(np.array(allocation) - np.array(preferences)))
+        return hamming_distance
+
+
 
     def solutionCount(self):
         return self._solution_count
