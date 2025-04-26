@@ -35,62 +35,76 @@ class FileParser():
     staff_grades = None
     quotas = None
     matrix = None
-    start_date = None
 
     def __init__(self, file):
 
         self.file = file
+        print("FileParser: ", file)
 
     def read_file(self):
 
         lines = self.file.read().decode("utf-8").splitlines()
         data = [line.split(",") for line in lines]
 
+        self.num_days = int(float(data[0][0].strip()))
+        self.num_staff = int(float(data[2][0].strip()))
 
-        self.num_days = int(data[0][0])
-        self.num_staff = int(data[2][0])
 
-        self.staff_grades = [int(x) for x in data[4][0:]]
-
-        print(self.staff_grades)
-        print(self.num_staff)
-        print(self.num_days)
+        self.staff_grades = [int(float(x.strip())) for x in  list(filter(None, data[4][0:]))]
 
         if len(self.staff_grades) != self.num_staff:
             raise ValueError("Staff grades array must have the same length as the number of staff in the problem")
         
-        self.leave_allowance = [int(x) for x in data[6][0:]]
+        self.leave_allowance = [int(float(x.strip())) for x in list(filter(None, data[6][0:]))]
 
         if len(self.leave_allowance) != self.num_staff:
             raise ValueError("Leave allowance array must have the same length as the number of staff in the problem")
         
-        self.quotas = [[float(x) for x in data[8][0:]] for y in range(5)]
+        self.quotas = [[float(x) for x in list(filter(None, data[8+y][0:]))] for y in range(5)]
 
         if len(self.quotas) != 5 or len(self.quotas[0]) != self.num_days:
             raise ValueError("Quota array must have a length of 5, and each row must have the same length as the number of days in the problem")
         
-        self.matrix = [[int(x) for x in row] for row in data[14:]]
+        self.matrix = [[int(float(x)) for x in row] for row in list(filter(None,data[14:]))]
 
         if len(self.matrix) != self.num_staff or len(self.matrix[0]) != self.num_days:
             raise ValueError("Allocation matrix must have the same length as the number of staff and days in the problem")
         
+    def to_Problem(self, startDate=None):
+
+        # check that all values are defined
+        if self.quotas is None:
+            raise ValueError("Quotas must be defined")
+                
+        if self.leave_allowance is None:
+            raise ValueError("Staff leave allowance must be defined")
+        
+        if self.matrix is None:
+            raise ValueError("Preference matrix must be defined")
+        
+        if self.staff_grades is None:
+            raise ValueError("Staff grades must be defined")
+
+        problem = Problem(self.num_staff, self.num_days, quotaArray=self.quotas, leaveAllowanceArray=self.leave_allowance, preferenceMatrix=self.matrix, startDate=startDate, staffGradesArray=self.staff_grades)
+
+        return problem
         
 
 
 # Function to highlight differences in DataFrame
-def highlight_diff(data, other, color='#ff616b'):
-    attr = f'background-color: {color}'
+def highlight_diff(data, other, colour='#ff616b'):
+    attr = f'background-color: {colour}'
     return pd.DataFrame(np.where(data.ne(other), attr, ''),
                         index=data.index, columns=data.columns)
 
 # Function to highlight cells based on value
-def highlight_cells(val):
-    color = '#1eff00' if val == 1 else ''
-    return 'color: %s' % color
+def highlight_cells(val, colour='#1eff00'):
+    return f'color: {colour}' if val == 1 else ''
 
-def highlight_past_allocation(val):
-    color = '#fcc203' if val == 1 else ''
-    return 'background-color: %s' % color
+def highlight_same(data, other, colour='#fcc203'):
+    attr = f'background-color: {colour}'
+    return pd.DataFrame(np.where(other==1, attr, ''),
+                        index=data.index, columns=data.columns)
 
 def get_dates(startDate=None, num_days=None):
 
@@ -115,41 +129,89 @@ def get_dates(startDate=None, num_days=None):
 
 class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
-    def __init__(self, num_staff, num_days, l, preferences, limit):
+    def __init__(self, num_staff, num_days, l, preferences, limit, startDate, leave_allowances, daily_quotas, grades, prev = None):
         cp_model.CpSolverSolutionCallback.__init__(self)
-        self._num_staff = num_staff
-        self._num_days = num_days
-        self._leave = l
-        self._solution_count = 0
-        self._solution_limit = limit
-        self._preference_matrix = preferences
+        self.num_staff = num_staff
+        self.num_days = num_days
+        self.leave = l
+        self.solution_count = 0
+        self.solution_limit = limit
+        self.preference_matrix = preferences
+        self.prev = prev
+        self.startDate = startDate
+        self.dates = get_dates(self.startDate, self.num_days)
+        self.leave_allowances = leave_allowances
+        self.daily_quotas = daily_quotas
+        self.grades = grades
 
     def on_solution_callback(self):
 
-        self._solution_count += 1    
+        self.solution_count += 1    
 
-        solutionArray = [[self.value(self._leave[(s, d)]) for d in range(self._num_days)] for s in range(self._num_staff)]
+        solutionArray = [[self.value(self.leave[(s, d)]) for d in range(self.num_days)] for s in range(self.num_staff)]
 
-        df = pd.DataFrame(solutionArray, columns=[f'Day {d+1}' for d in range(self._num_days)], index=[f'Employee {x+1}' for x in range(self._num_staff)])
+        df = pd.DataFrame(solutionArray, columns=[date.strftime('%d/%m/%Y') for date in self.dates], index=[f'Employee {x+1}' for x in range(self.num_staff)])
 
-        df2 = pd.DataFrame(self._preference_matrix, columns=[f'Day {d+1}' for d in range(self._num_days)], index=[f'Employee {x+1}' for x in range(self._num_staff)])
-        
+        df2 = pd.DataFrame(self.preference_matrix, columns=[date.strftime('%d/%m/%Y') for date in self.dates], index=[f'Employee {x+1}' for x in range(self.num_staff)])
+
         df_styled = df.style.applymap(highlight_cells).apply(highlight_diff, axis=None, other=df2)
 
-        # print(f"Hamming Distance: {self.getHammingDistance(solutionArray, self._preference_matrix)}")
+        if self.prev is not None:
 
+            df3 = pd.DataFrame(self.prev, columns=[date.strftime('%d/%m/%Y') for date in self.dates], index=[f'Employee {x+1}' for x in range(self.num_staff)])
 
-        st.session_state.solution_array.append((df_styled,df))
-        print(st.session_state.solution_array)
+            df_styled = df_styled.apply(highlight_same, axis=None, other=df3)
 
-        if self._solution_count >= self._solution_limit:
-            print(f"Stop search after {self._solution_limit} solutions")
+        metrics = self.getMetrics(solutionArray=df)
+
+        explanation = self.explain_solution(solution=df)
+
+        st.session_state.solution_array.append((df_styled,df,metrics, explanation))
+
+        if self.solution_count >= self.solution_limit:
             self.stop_search()
 
-    # def getMetrics(self, allocation, preferences):
+    def getMetrics(self, solutionArray):
 
-    #     hamming_distance = np.sum(np.abs(np.array(allocation) - np.array(preferences)))
-    #     return hamming_distance
+        metrics = {}
+
+        metrics["objective_value"] = self.ObjectiveValue()
+        
+        preference_leave_days_count = self.preference_matrix.sum().sum()
+        assigned_leave_days_count = solutionArray.sum().sum()
+
+        metrics["percentage_of_leave_granted"] = f"{(assigned_leave_days_count / preference_leave_days_count) * 100:.2f}%"
+
+        return metrics
+    
+    def explain_solution(self, solution):
+
+        reasons = []
+
+        for i in range(self.num_staff):
+            this_leave_allowance = self.leave_allowances[i]
+            leave_taken = sum(solution.iloc[i,:])
+
+            for j in range(self.num_days):
+                this_day_quota = self.daily_quotas[self.grades[i], j]
+                
+                quota_taken = sum([solution.iloc[k,j] for k in range(self.num_staff) if self.grades[k] == self.grades[i]])
+
+                if solution.iloc[i,j] == 0 and self.preference_matrix[i,j] == 1:
+
+                    if this_day_quota >= quota_taken:
+
+                        reasons.append(f"**Employee {i+1}, Day {j+1}** : leave limit for grade {grades_reverse[self.grades[i]].upper()} met ({quota_taken}/{this_day_quota})")
+
+                    if this_leave_allowance <= leave_taken:
+
+                        reasons.append(f"**Employee {i+1}, Day {j+1}**: Leave allowance met: ({leave_taken}/{this_leave_allowance})")
+
+        return reasons
+
+
+
+
 
     def solutionCount(self):
         return self._solution_count
@@ -268,7 +330,7 @@ class Problem:
             raise ValueError("Staff grades must be defined")
         
     def __str__(self):
-        return f"{self.num_staff} staff, {self.num_days} days,\n grades: {self.staff_grades}\nquotas:\n{self.daily_quotas},\nstaff leave allowance:\n{self.staff_leave_allowance}\npreference matrix:\n{self.preference_matrix}"
+        return f"{self.num_staff} staff, {self.num_days} days,\n grades: {self.staff_grades}\nquotas:\n{self.daily_quotas},\nstaff leave allowance:\n{self.staff_leave_allowance}\npreference matrix:\n{self.preference_matrix} \n past allocation:\n{self.past_allocation}"
     
 
     # Use the start date of the problem to generate a list of dates for display
@@ -299,41 +361,96 @@ class Problem:
         # get the number of ones and zeros in the matrix
         num_ones = int(self.num_staff * self.num_days * (preferencePercentage / 100))
         num_zeros = (self.num_staff * self.num_days) - num_ones
-        array = np.array([True] * num_ones + [False] * num_zeros)
+        array = np.array([1] * num_ones + [0] * num_zeros)
 
         # shuffle the array to randomise the order of ones and zeros
         np.random.shuffle(array)
         return array.reshape(self.num_staff,self.num_days)
 
-    def dataset_to_csv(self):
-        # data = [[self.num_days], [self.num_staff], self.staff_leave_allowance, self.daily_quotas]
+    def solution_to_csv(self, solution):
+        data = []
 
-        # data.extend(self.preference_matrix.tolist())
+        data.append([self.num_days])
+        data.append([])
+        data.append([self.num_staff])
+        data.append([])
+        data.append(self.staff_grades)
+        data.append([])
+        data.append(self.staff_leave_allowance)
+        data.append([])
 
-        # df = pd.DataFrame(data)
-        # csv_data = df.to_csv(index=False, header=False)
-        # return csv_data
-        return None
+        for row in self.daily_quotas:
+            data.append(row)
+        data.append([])
+
+        for row in solution.to_numpy():
+            data.append(row)
+        
+        return pd.DataFrame(data).to_csv(index=False, header=False)
+
 
     # Hard constraints for problem
     def hard_constraints(self):
 
          # Staff leave allowance not exceeded
         for e in range(self.num_staff):
-            self.model.Add(sum(self.l[e, d] for d in range(self.num_days)) <= self.staff_leave_allowance[e])
+
+            if self.past_allocation is not None:
+                allocated_days = sum(self.past_allocation[e][d] for d in range(self.num_days))
+
+                self.model.Add(sum(self.l[e, d] for d in range(self.num_days)) <= (self.staff_leave_allowance[e] + allocated_days) )
+
+            else:
+                self.model.Add(sum(self.l[e, d] for d in range(self.num_days)) <= self.staff_leave_allowance[e] )
         
 
         # change percentage quotas to number of staff
         self.percent_to_value()
 
         # daily leave quota not exceeded
-        # calculate number of staff * staff_limit for each day
+        # for d in range(self.num_days):
+
+        #     if self.past_allocation is not None:
+        #         already_allocated = sum(self.past_allocation[e][d] for e in range(self.num_staff))
+
+        
+        #     self.model.Add(sum(self.l[e, d] for e in range(self.num_staff)) <= self.daily_quotas_real[self.staff_grades[e]][d])
+
+        # daily leave quota not exceeded
         for d in range(self.num_days):
-            self.model.Add(sum(self.l[e, d] for e in range(self.num_staff)) <= self.daily_quotas_real[self.staff_grades[e]][d])
+
+            for grade in range(5):
+
+                staff_in_grade = [e for e in range(self.num_staff) if self.staff_grades[e] == grade]
+
+                already_allocated = sum(self.past_allocation[e][d] for e in staff_in_grade) if self.past_allocation is not None else 0
+
+                new_allocation = sum(self.l[e, d] for e in staff_in_grade)
+
+                remaining_quota = self.daily_quotas_real[grade][d] - already_allocated
+
+                remaining_quota = max(remaining_quota, already_allocated)
+
+                self.model.Add(new_allocation <= remaining_quota)
+
+
+            #     self.model.Add(sum(self.l[e, d] for e in range(self.num_staff) if self.staff_grades[e] == grade) <= self.daily_quotas_real[grade][d])
+
+            # already_allocated = sum(self.past_allocation[e][d] for e in range(self.num_staff)) if self.past_allocation is not None else 0
+            # total_leave = sum(self.l[e, d] for e in range(self.num_staff))
+
+            # self.model.Add(total_leave - already_allocated <= self.daily_quotas_real[self.staff_grades[e]][d])
+
+
 
         # Don't allocate leave that isnt requested
         for d in range(self.num_days):
             for e in range(self.num_staff):
+
+                if self.past_allocation is not None:
+                    if self.past_allocation[e][d] == 1:
+                        self.model.Add(self.l[e, d] == 1)
+                        continue
                 if self.preference_matrix[e][d] == 0:
                     self.model.Add(self.l[e, d] == 0)
 
@@ -342,12 +459,12 @@ class Problem:
             for d in range(self.num_days - 10):
                 self.model.Add(sum(self.l[e, d + i] for i in range(11)) <= 10)
 
-        # Honour previous allocation if provided
-        if self.past_allocation is not None:
-            for e in range(self.num_staff):
-                for d in range(self.num_days):
-                    if self.past_allocation[e][d] == 1:
-                        self.model.Add(self.l[e, d] == 1)
+        # # Honour previous allocation if provided
+        # if self.past_allocation is not None:
+        #     for e in range(self.num_staff):
+        #         for d in range(self.num_days):
+        #             if self.past_allocation[e][d] == 1:
+        #                 self.model.Add(self.l[e, d] == 1)
 
     # soft constraints for problem
     def soft_constraints(self):
@@ -389,6 +506,12 @@ class Problem:
         self.l = {}
         for e in range(self.num_staff):
             for d in range(self.num_days):
+
+                # if self.past_allocation is not None:
+                #     if self.past_allocation[e][d] == 1:
+                #         self.l[(e, d)] = 1
+                #         continue
+
                 self.l[(e, d)] = self.model.new_bool_var(f"L_{e}_d{d}")
 
              
@@ -399,7 +522,7 @@ class Problem:
     # solve the model and return the solutions
     def list_all_solutions(self):
         solution_limit = 100
-        solution_printer = SolutionPrinter(self.num_staff, self.num_days, self.l, self.preference_matrix, solution_limit)
+        solution_printer = SolutionPrinter(self.num_staff, self.num_days, self.l, self.preference_matrix, solution_limit, self.startDate, self.staff_leave_allowance, self.daily_quotas_real, self.staff_grades, self.past_allocation)
         solver = cp_model.CpSolver()
         solver.parameters.enumerate_all_solutions = True
         solver.parameters.max_time_in_seconds = 10.0
@@ -426,7 +549,7 @@ class Problem:
             mask[col] = previous_allocation[col]
 
         self.past_allocation = mask.to_numpy()
-        print(self.past_allocation)
+
         return
     
     # convert the percentage quotas to the number of staff
@@ -454,4 +577,8 @@ class Problem:
         self.objective_1_weighting = objective_1_weighting
         self.objective_2_weighting = objective_2_weighting
         self.objective_3_weighting = objective_3_weighting
+
+        print(f"\n\n\n\n\n\Objective 1 weighting: {self.objective_1_weighting}")
+        print(f"\n\n\n\n\n\Objective 2 weighting: {self.objective_2_weighting}")
+        print(f"\n\n\n\n\n\Objective 3 weighting: {self.objective_3_weighting}")
                 

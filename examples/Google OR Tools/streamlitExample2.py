@@ -24,17 +24,14 @@ def create_problem():
 
 def create_problem_from_file(file):
 
-    try:
-        lines = file.read().decode("utf-8").splitlines()
-        data = [line.split(",") for line in lines]
+    st.session_state.solution_exists = False
+    problem = FileParser(file)
+    problem.read_file()
+    st.session_state.problem = problem.to_Problem(st.session_state.modelling_start_date)
 
-        st.session_state.problem = Problem(int(data[0][0]), int(data[1][0]), leaveAllowanceArray=[int(x) for x in data[2]], quotaArray=[float(x) for x in data[3]], preferenceMatrix=[[int(x) for x in row] for row in data[4:]])
+    st.write(st.session_state.problem)
 
-        st.write(st.session_state.problem)
-
-    except Exception as e:
-        st.error(f"Error reading file: {e}")
-    pass
+   
 
 def update_matrix(old, changes, employee=True):
     
@@ -62,9 +59,6 @@ def get_streamlit_parameters():
 
     allowances_grades_updated = update_matrix(st.session_state.ag_df, st.session_state.allowances_grades["edited_rows"])
 
-    print("\n")
-    print(allowances_grades_updated)
-
     allowances = allowances_grades_updated["Leave Allowance (Days)"].values
     grades = allowances_grades_updated["Grade"].values
 
@@ -79,8 +73,6 @@ def get_streamlit_parameters():
 
         new_problem.add_past_allocation(prev_allocation, st.session_state.prev_start_date)
     
-    print(new_problem)
-
     return new_problem
 
 
@@ -94,36 +86,8 @@ def generateStreamlitSolution():
 
     st.session_state.problem.createModel()
 
-    print(st.session_state.problem)
     st.session_state.solution_array = []
     st.session_state.problem.list_all_solutions()
-
-def explain_solution(solution: pd.DataFrame, problem: Problem ):
-
-    for i in range(problem.num_staff):
-        this_leave_allowance = problem.staff_leave_allowance[i]
-        leave_taken = sum(solution.iloc[i,:])
-
-        for j in range(problem.num_days):
-            this_day_quota = problem.daily_quotas[j]
-            this_day_quota_limit = ceil(problem.num_staff * this_day_quota)
-            quota_taken = sum(solution.iloc[:,j])
-
-            if solution.iloc[i,j] == 0 and problem.preference_matrix[i,j] == 1:
-
-
-                if this_day_quota_limit >= quota_taken:
-                    st.markdown(f"Employee {i+1} has not been granted leave on Day {j+1} because the staff leave limit for this day has been met ({quota_taken}/{this_day_quota_limit})")
-
-                if this_leave_allowance <= leave_taken:
-
-                    st.markdown(f"Employee {i+1} has not been granted leave on Day {j+1} because they have met their leave allowance ({leave_taken}/{this_leave_allowance})")
-
-            
-            elif solution.iloc[i,j] == 1 and problem.preference_matrix[i,j] == 0:
-                st.markdown(f":orange[Employee {i+1} has been granted leave on Day {j+1} but did not request it]")
-
-    pass
 
 
 with st.sidebar:
@@ -137,11 +101,14 @@ with st.sidebar:
         if selection == "Input from File":
             with placeholder.container():
                 uploaded_file = st.file_uploader("Choose a CSV file.", type="csv")
-                if uploaded_file is not None:
-                    st.session_state.problem = None
-                    st.session_state.solution_exists = False
-                    
-                    create_problem_from_file(uploaded_file)
+
+                if st.button("Upload File", use_container_width=True):
+
+                    if uploaded_file is not None:
+                        st.session_state.problem = None
+                        st.session_state.solution_exists = False
+                        
+                        create_problem_from_file(uploaded_file)
 
         else:
             with placeholder.container():
@@ -202,7 +169,7 @@ with tab1:
         
         st.markdown("#### Preference Matrix")
 
-        st.session_state.preference_matrix_df = pd.DataFrame(st.session_state.problem.preference_matrix, columns=[d.strftime('%d/%m/%Y') for d in st.session_state.problem.dates], index=[f"Employee {i+1}" for i in range(st.session_state.problem.num_staff)])
+        st.session_state.preference_matrix_df = pd.DataFrame(st.session_state.problem.preference_matrix, columns=[d.strftime('%d/%m/%Y') for d in st.session_state.problem.dates], index=[f"Employee {i+1}" for i in range(st.session_state.problem.num_staff)]).replace(0, False).replace(1, True)
 
         st.data_editor(st.session_state.preference_matrix_df, key="preference_matrix")
 
@@ -210,6 +177,24 @@ with tab1:
         st.write("No model data generated.")
 
     pass
+
+
+@st.dialog("Edit Matrix")
+def edit_matrix(matrix):
+    st.write("Edit Matrix")
+
+    checkbox_matrix = matrix.replace(0, False).replace(1, True)
+
+
+
+    st.data_editor(checkbox_matrix, use_container_width=True, key="edited_matrix")
+    new_matrix = update_matrix(matrix, st.session_state.edited_matrix["edited_rows"])
+    st.dataframe(new_matrix)
+
+    # data = st.session_state.problem.solution_to_csv(new_matrix.replace(False,0).replace(True,1).to_numpy(), filename=f"{st.session_state.problem.dates[0]}_allocation.csv")
+
+    st.download_button(label="Download CSV", data=st.session_state.problem.solution_to_csv(new_matrix.replace(False,0).replace(True,1)).encode('utf-8'), file_name=f"{st.session_state.problem.dates[0]}_allocation.csv", mime="text/csv")
+
 
 
 with tab2:
@@ -240,24 +225,50 @@ with tab2:
 
                 if prev_file is not None:
 
-                    st.dataframe(get_previous_allocation(prev_file).style.applymap(highlight_past_allocation))
-
-                    
+                    st.dataframe(get_previous_allocation(prev_file).style.applymap(highlight_cells, colour="orange"))
+                                                                                                        
 
 
             st.button("Solve Model", on_click=generateStreamlitSolution)
 
         else:
 
-            for i, solution in enumerate(st.session_state.solution_array):
+            if st.button("Reset Solution", use_container_width=True):
+                st.session_state.solution_exists = False
+
+            for i, solution in enumerate(reversed(st.session_state.solution_array)):
                 st.markdown(f"#### Solution {i+1}")
-                st.dataframe(solution[0], selection_mode=["single-row", "single-column"],on_select="rerun")
+                st.dataframe(solution[0])
 
-                # with st.expander("Decisions made:"):
+                with st.expander("Solution Details:", expanded=True):
 
-                    # explain_solution(solution[1], st.session_state.problem)
-                              
-    pass
+                    metrics = solution[2]
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric(label="Objective Value", value=metrics["objective_value"])
+                        
+                    with col2:
+                        st.metric(label="Preference Satisfaction", value=metrics["percentage_of_leave_granted"])
+
+                with st.expander("Decisions made:"):
+                    if solution[3] is not None:
+                        for reason in solution[3]:
+                            st.markdown(f"- {reason}")
+
+                if st.button(f"Edit Matrix {i+1}"):
+                    edit_matrix(solution[1])
+                
+
+
+                       
+
+
+
+
+
+    
+    # download = st.download_button(label="Download CSV", on_click=st.session_state.edit_matrix.close)
 
 
 
