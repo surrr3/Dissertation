@@ -8,6 +8,8 @@ from math import ceil
 import streamlit as st
 import datetime
 
+
+# staff grades
 grades = {
     'Associate': 0,
     'Senior Associate': 1,
@@ -15,7 +17,6 @@ grades = {
     'Senior Manager': 3,
     'Director': 4
 }
-
 grades_reverse = {
     0: 'Associate',
     1: 'Senior Associate',
@@ -25,7 +26,6 @@ grades_reverse = {
 }
 
 
-# Class to store the previous allocation data
 # Used to read and parse previous allocation or new model data from a file
 class FileParser():
 
@@ -37,10 +37,9 @@ class FileParser():
     matrix = None
 
     def __init__(self, file):
-
         self.file = file
-        print("FileParser: ", file)
 
+    # read the file and parse the data
     def read_file(self):
 
         lines = self.file.read().decode("utf-8").splitlines()
@@ -48,8 +47,6 @@ class FileParser():
 
         self.num_days = int(float(data[0][0].strip()))
         self.num_staff = int(float(data[2][0].strip()))
-
-
         self.staff_grades = [int(float(x.strip())) for x in  list(filter(None, data[4][0:]))]
 
         if len(self.staff_grades) != self.num_staff:
@@ -70,6 +67,7 @@ class FileParser():
         if len(self.matrix) != self.num_staff or len(self.matrix[0]) != self.num_days:
             raise ValueError("Allocation matrix must have the same length as the number of staff and days in the problem")
         
+    # create Problem object from the parsed data
     def to_Problem(self, startDate=None):
 
         # check that all values are defined
@@ -85,11 +83,10 @@ class FileParser():
         if self.staff_grades is None:
             raise ValueError("Staff grades must be defined")
 
+        # make problem object
         problem = Problem(self.num_staff, self.num_days, quotaArray=self.quotas, leaveAllowanceArray=self.leave_allowance, preferenceMatrix=self.matrix, startDate=startDate, staffGradesArray=self.staff_grades)
 
         return problem
-        
-
 
 # Function to highlight differences in DataFrame
 def highlight_diff(data, other, colour='#ff616b'):
@@ -101,11 +98,13 @@ def highlight_diff(data, other, colour='#ff616b'):
 def highlight_cells(val, colour='#1eff00'):
     return f'color: {colour}' if val == 1 else ''
 
+# highlight cells that are the same as the previous allocation
 def highlight_same(data, other, colour='#fcc203'):
     attr = f'background-color: {colour}'
     return pd.DataFrame(np.where(other==1, attr, ''),
                         index=data.index, columns=data.columns)
 
+# get a list of dates, excluding weekends
 def get_dates(startDate=None, num_days=None):
 
         # check if start date is defined, if not, set to today
@@ -127,6 +126,7 @@ def get_dates(startDate=None, num_days=None):
         return dates
 
 
+# Class to print the solution to the streamlit app
 class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
     def __init__(self, num_staff, num_days, l, preferences, limit, startDate, leave_allowances, daily_quotas, grades, prev = None):
@@ -144,20 +144,26 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         self.daily_quotas = daily_quotas
         self.grades = grades
 
+
+    # function to run for each solution found, generates dataframe and stores it in session state
     def on_solution_callback(self):
 
         self.solution_count += 1    
 
+        # get the solution
         solutionArray = [[self.value(self.leave[(s, d)]) for d in range(self.num_days)] for s in range(self.num_staff)]
 
+        # solution dataframe
         df = pd.DataFrame(solutionArray, columns=[date.strftime('%d/%m/%Y') for date in self.dates], index=[f'Employee {x+1}' for x in range(self.num_staff)])
 
+        # preference matrix dataframe
         df2 = pd.DataFrame(self.preference_matrix, columns=[date.strftime('%d/%m/%Y') for date in self.dates], index=[f'Employee {x+1}' for x in range(self.num_staff)])
 
         df_styled = df.style.applymap(highlight_cells).apply(highlight_diff, axis=None, other=df2)
 
         if self.prev is not None:
 
+            # previous allocation dataframe
             df3 = pd.DataFrame(self.prev, columns=[date.strftime('%d/%m/%Y') for date in self.dates], index=[f'Employee {x+1}' for x in range(self.num_staff)])
 
             df_styled = df_styled.apply(highlight_same, axis=None, other=df3)
@@ -171,6 +177,7 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         if self.solution_count >= self.solution_limit:
             self.stop_search()
 
+    # get metrics for each solution
     def getMetrics(self, solutionArray):
 
         metrics = {}
@@ -184,9 +191,11 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
         return metrics
     
+    # explain the solution, return a list of reasons for each leave day not granted
     def explain_solution(self, solution):
 
         reasons = []
+
 
         for i in range(self.num_staff):
             this_leave_allowance = self.leave_allowances[i]
@@ -209,13 +218,10 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
         return reasons
 
-
-
-
-
     def solutionCount(self):
         return self._solution_count
-    
+
+# class to store the model and its parameters 
 class Problem:
 
     daily_quotas = None
@@ -247,6 +253,8 @@ class Problem:
         preferencePercentage: percentage of preference for each staff member (optional)
         preferenceMatrix: list of preferences for each staff member (optional)
         startDate: start date to model from (optional)
+        staffGradesArray: list of staff grades for each staff member (optional)
+        staffGradesChoices: list of staff grades to randomly generate from (optional)
     '''
     
     def __init__(self, num_staff: int, num_days: int, quotaLimits: tuple = None, quotaArray: list = None, leaveAllowanceLimits: tuple = None, leaveAllowanceArray: list = None, preferencePercentage:int = None, preferenceMatrix: list = None, startDate: datetime.date = None, staffGradesArray: list = None, staffGradesChoices: list = None ):
@@ -367,6 +375,8 @@ class Problem:
         np.random.shuffle(array)
         return array.reshape(self.num_staff,self.num_days)
 
+
+    # convert the solution to a csv file for download
     def solution_to_csv(self, solution):
         data = []
 
@@ -507,11 +517,6 @@ class Problem:
         for e in range(self.num_staff):
             for d in range(self.num_days):
 
-                # if self.past_allocation is not None:
-                #     if self.past_allocation[e][d] == 1:
-                #         self.l[(e, d)] = 1
-                #         continue
-
                 self.l[(e, d)] = self.model.new_bool_var(f"L_{e}_d{d}")
 
              
@@ -528,6 +533,7 @@ class Problem:
         solver.parameters.max_time_in_seconds = 10.0
         solver.Solve(self.model, solution_printer)       
 
+    # add a past allocation to the model
     def add_past_allocation(self, past_allocation: FileParser, past_start_date: datetime.date):
 
         # check paramters are compatible
@@ -537,12 +543,9 @@ class Problem:
         if not past_allocation.num_days == self.num_days:
             raise ValueError("Number of days in past allocation must be the same as the number of days in the problem")
         
-        past_dates = self.get_dates(past_start_date, past_allocation.num_days)
-
+        # get the intersection of the dates in the past allocation and the current problem
         mask = pd.DataFrame(np.zeros((self.num_staff, self.num_days), dtype=int), columns=[date.strftime('%d/%m/%Y') for date in self.dates])
-
         previous_allocation = pd.DataFrame(past_allocation.matrix, columns=[date.strftime('%d/%m/%Y') for date in self.get_dates(past_start_date, past_allocation.num_days)])
-
         common_cols = mask.columns.intersection(previous_allocation.columns)
 
         for col in common_cols:
@@ -577,8 +580,4 @@ class Problem:
         self.objective_1_weighting = objective_1_weighting
         self.objective_2_weighting = objective_2_weighting
         self.objective_3_weighting = objective_3_weighting
-
-        print(f"\n\n\n\n\n\Objective 1 weighting: {self.objective_1_weighting}")
-        print(f"\n\n\n\n\n\Objective 2 weighting: {self.objective_2_weighting}")
-        print(f"\n\n\n\n\n\Objective 3 weighting: {self.objective_3_weighting}")
                 

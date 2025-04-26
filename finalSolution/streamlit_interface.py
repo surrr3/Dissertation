@@ -1,27 +1,25 @@
 import pandas as pd
 from math import ceil
 import streamlit as st
-
 from ALAllocation import *
 
-
-####################################################
-# Streamlit app
 
 st.set_page_config(layout="wide")
 
 if "problem" not in st.session_state:
     st.session_state.problem = None
 
+# create a problem object from interface parameters
 def create_problem():
 
-    # try:
-    st.session_state.solution_exists = False
-    st.session_state.problem = Problem(num_staff=st.session_state.num_staff, num_days=st.session_state.num_days, leaveAllowanceLimits=st.session_state.leave_entitlement_range, quotaLimits=st.session_state.quotas_range, preferencePercentage=st.session_state.preference_percentage, startDate=st.session_state.modelling_start_date, staffGradesChoices=st.session_state.grades_selection)
+    try:
+        st.session_state.solution_exists = False
+        st.session_state.problem = Problem(num_staff=st.session_state.num_staff, num_days=st.session_state.num_days, leaveAllowanceLimits=st.session_state.leave_entitlement_range, quotaLimits=st.session_state.quotas_range, preferencePercentage=st.session_state.preference_percentage, startDate=st.session_state.modelling_start_date, staffGradesChoices=st.session_state.grades_selection)
         
-    # except Exception as e:
-    #     st.error(f"Error creating problem: {e}")
+    except Exception as e:
+        st.error(f"Error creating problem: {e}")
 
+# create a problem object from file
 def create_problem_from_file(file):
 
     st.session_state.solution_exists = False
@@ -31,8 +29,7 @@ def create_problem_from_file(file):
 
     st.write(st.session_state.problem)
 
-   
-
+# update a matrix with changes from the streamlit interface
 def update_matrix(old, changes, employee=True):
     
     new = old.copy()
@@ -43,28 +40,23 @@ def update_matrix(old, changes, employee=True):
 
     return new
 
-
+# get a precious allocation from a csv file
 def get_previous_allocation(file):
-
     prev_allocation = FileParser(file)
     prev_allocation.read_file()
     return pd.DataFrame(prev_allocation.matrix, columns=[i.strftime('%d/%m/%Y') for i in get_dates(st.session_state.prev_start_date, prev_allocation.num_days)], index=[f"Employee {i+1}" for i in range(prev_allocation.num_staff)])
 
-
-
+# get updated parameters from the streamlit interface and return a new problem object
 def get_streamlit_parameters():
-
 
     preferences_updated = update_matrix(st.session_state.preference_matrix_df, st.session_state.preference_matrix["edited_rows"]).astype(int).to_numpy()
 
     allowances_grades_updated = update_matrix(st.session_state.ag_df, st.session_state.allowances_grades["edited_rows"])
-
     allowances = allowances_grades_updated["Leave Allowance (Days)"].values
     grades = allowances_grades_updated["Grade"].values
 
     daily_quotas_updated = update_matrix(st.session_state.dq_df, st.session_state.daily_quotas["edited_rows"], employee=False).to_numpy()
     
-
     new_problem = Problem(num_staff=st.session_state.problem.num_staff, num_days=st.session_state.problem.num_days, quotaArray=daily_quotas_updated, leaveAllowanceArray=allowances, preferenceMatrix=preferences_updated, startDate=st.session_state.modelling_start_date, staffGradesChoices=grades)
 
     if st.session_state.prev_file is not None:
@@ -75,31 +67,45 @@ def get_streamlit_parameters():
     
     return new_problem
 
-
-
+# generate a solution triggered by the streamlit interface
 def generateStreamlitSolution():
+
     st.session_state.solution_exists = True
-
     st.session_state.problem = get_streamlit_parameters()
-
     st.session_state.problem.set_weightings(st.session_state.preference_weighting, st.session_state.consecutive_days_weighting, st.session_state.remaining_leave_allowance_weighting)
-
     st.session_state.problem.createModel()
 
     st.session_state.solution_array = []
     st.session_state.problem.list_all_solutions()
 
+# dialog to edit a solution matrix
+@st.dialog("Edit Matrix", width="large")
+def edit_matrix(matrix):
 
+    st.write("Edit Matrix")
+
+    checkbox_matrix = matrix.replace(0, False).replace(1, True)
+    st.data_editor(checkbox_matrix, use_container_width=True, key="edited_matrix")
+
+    # get changes from the streamlit interface
+    new_matrix = update_matrix(matrix, st.session_state.edited_matrix["edited_rows"])
+
+    # button to download the solution as a csv file
+    st.download_button(label="Download CSV", data=st.session_state.problem.solution_to_csv(new_matrix.replace(False,0).replace(True,1)).encode('utf-8'), file_name=f"{st.session_state.problem.dates[0]}_allocation.csv", mime="text/csv")
+
+
+# sidebar to select input mode and parameters
 with st.sidebar:
         selection = st.segmented_control("Input Mode", ["Generate Input", "Input from File"], selection_mode="single", default="Generate Input")
 
         date = st.date_input("Start Date", value="today", format="DD/MM/YYYY", key="modelling_start_date")
 
-        
         placeholder = st.empty()
 
+        # input from file
         if selection == "Input from File":
             with placeholder.container():
+
                 uploaded_file = st.file_uploader("Choose a CSV file.", type="csv")
 
                 if st.button("Upload File", use_container_width=True):
@@ -110,6 +116,7 @@ with st.sidebar:
                         
                         create_problem_from_file(uploaded_file)
 
+        # generated input from streamlit interface
         else:
             with placeholder.container():
 
@@ -135,22 +142,22 @@ with st.sidebar:
 
                     preference_percentage = st.number_input("Percentage of Leave for Generated Preference Matrix", min_value=1, value=9, key="preference_percentage")
 
-                    
                     submit_button = st.form_submit_button(label="Generate Data", on_click=create_problem)
 
 
 
+# Data and Output tabs
 tab1, tab2 = st.tabs(["Data", "Output"])
 
+# data proofing and editing tab
 with tab1:
-    
     if st.session_state.problem:
+
         col1, col2 = st.columns([2,3])
+
         with col1:
             st.metric(label="Employees", value=st.session_state.problem.num_staff)
             st.markdown("##### Staff Leave Allowances")
-
-            # allowances_grades = st.session_state.problem.staff_leave_allowance.copy()
 
             allowances_grades = pd.DataFrame(st.session_state.problem.staff_leave_allowance, columns=["Leave Allowance (Days)"], index=[f"Employee {i+1}" for i in range(st.session_state.problem.num_staff)])
 
@@ -161,10 +168,13 @@ with tab1:
             st.data_editor(allowances_grades, key="allowances_grades")
             
         with col2:
+
             st.metric(label="Days", value=st.session_state.problem.num_days)
+
             st.markdown("##### Daily Quotas")
 
             st.session_state.dq_df = pd.DataFrame(st.session_state.problem.daily_quotas, columns=[d.strftime('%d/%m/%Y') for d in st.session_state.problem.dates], index=[x for x in grades.keys()])
+
             st.data_editor(st.session_state.dq_df, key="daily_quotas")
         
         st.markdown("#### Preference Matrix")
@@ -176,34 +186,14 @@ with tab1:
     else:
         st.write("No model data generated.")
 
-    pass
 
-
-@st.dialog("Edit Matrix")
-def edit_matrix(matrix):
-    st.write("Edit Matrix")
-
-    checkbox_matrix = matrix.replace(0, False).replace(1, True)
-
-
-
-    st.data_editor(checkbox_matrix, use_container_width=True, key="edited_matrix")
-    new_matrix = update_matrix(matrix, st.session_state.edited_matrix["edited_rows"])
-    st.dataframe(new_matrix)
-
-    # data = st.session_state.problem.solution_to_csv(new_matrix.replace(False,0).replace(True,1).to_numpy(), filename=f"{st.session_state.problem.dates[0]}_allocation.csv")
-
-    st.download_button(label="Download CSV", data=st.session_state.problem.solution_to_csv(new_matrix.replace(False,0).replace(True,1)).encode('utf-8'), file_name=f"{st.session_state.problem.dates[0]}_allocation.csv", mime="text/csv")
-
-
-
+# solution tab
 with tab2:
 
     if not st.session_state.problem:
         st.write("No model data generated.")
 
     else:
-
         if st.session_state.solution_exists == False:
 
             st.markdown("#### Solution Parameters")
@@ -222,13 +212,9 @@ with tab2:
 
                 prev_file = st.file_uploader("Upload a CSV file with previous allocation data. Must have the same dimensions as the current allocation", type="csv", key="prev_file")
 
-
                 if prev_file is not None:
-
                     st.dataframe(get_previous_allocation(prev_file).style.applymap(highlight_cells, colour="orange"))
                                                                                                         
-
-
             st.button("Solve Model", on_click=generateStreamlitSolution)
 
         else:
@@ -245,6 +231,7 @@ with tab2:
                     metrics = solution[2]
 
                     col1, col2 = st.columns(2)
+                    
                     with col1:
                         st.metric(label="Objective Value", value=metrics["objective_value"])
                         
@@ -259,16 +246,5 @@ with tab2:
                 if st.button(f"Edit Matrix {i+1}"):
                     edit_matrix(solution[1])
                 
-
-
-                       
-
-
-
-
-
-    
-    # download = st.download_button(label="Download CSV", on_click=st.session_state.edit_matrix.close)
-
 
 
