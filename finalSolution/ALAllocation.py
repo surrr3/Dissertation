@@ -237,7 +237,8 @@ class Problem:
     objective_1_weighting = 2
     objective_2_weighting = 5
     objective_3_weighting = 1
-
+    time_limit = 10
+    runtime = 0
 
 
     '''
@@ -263,7 +264,7 @@ class Problem:
         self.num_days = num_days
         self.startDate = startDate
 
-        self.dates = self.get_dates(self.startDate, self.num_days)
+        self.dates = get_dates(self.startDate, self.num_days)
 
         # get staff grades, either randomly generate or get from array
         if staffGradesArray:
@@ -341,28 +342,6 @@ class Problem:
         return f"{self.num_staff} staff, {self.num_days} days,\n grades: {self.staff_grades}\nquotas:\n{self.daily_quotas},\nstaff leave allowance:\n{self.staff_leave_allowance}\npreference matrix:\n{self.preference_matrix} \n past allocation:\n{self.past_allocation}"
     
 
-    # Use the start date of the problem to generate a list of dates for display
-    def get_dates(self, startDate=None, num_days=None):
-
-        # check if start date is defined, if not, set to today
-        if not startDate:
-            startDate = datetime.date.today()
-
-        dates = []
-        counter = 0
-
-        # get list of dates for the number of days in the problem
-        while len(dates) < num_days:
-            date = startDate + datetime.timedelta(days=counter)
-
-            # only add weekdays (mon-fri)
-            if date.weekday() < 5:
-                dates.append(date)
-            counter += 1
-
-        return dates
-        
-
     # generate a preference matrix if one doesn't exist
     def generate_preference_matrix(self, preferencePercentage):
 
@@ -386,7 +365,7 @@ class Problem:
         data.append([])
         data.append(self.staff_grades)
         data.append([])
-        data.append(self.staff_leave_allowance)
+        data.append(self.calculate_new_leave_allowance(solution))
         data.append([])
 
         for row in self.daily_quotas:
@@ -530,8 +509,9 @@ class Problem:
         solution_printer = SolutionPrinter(self.num_staff, self.num_days, self.l, self.preference_matrix, solution_limit, self.startDate, self.staff_leave_allowance, self.daily_quotas_real, self.staff_grades, self.past_allocation)
         solver = cp_model.CpSolver()
         solver.parameters.enumerate_all_solutions = True
-        solver.parameters.max_time_in_seconds = 10.0
-        solver.Solve(self.model, solution_printer)       
+        solver.parameters.max_time_in_seconds = self.time_limit
+        solver.Solve(self.model, solution_printer)
+        self.runtime = solver.WallTime()
 
     # add a past allocation to the model
     def add_past_allocation(self, past_allocation: FileParser, past_start_date: datetime.date):
@@ -545,7 +525,7 @@ class Problem:
         
         # get the intersection of the dates in the past allocation and the current problem
         mask = pd.DataFrame(np.zeros((self.num_staff, self.num_days), dtype=int), columns=[date.strftime('%d/%m/%Y') for date in self.dates])
-        previous_allocation = pd.DataFrame(past_allocation.matrix, columns=[date.strftime('%d/%m/%Y') for date in self.get_dates(past_start_date, past_allocation.num_days)])
+        previous_allocation = pd.DataFrame(past_allocation.matrix, columns=[date.strftime('%d/%m/%Y') for date in get_dates(past_start_date, past_allocation.num_days)])
         common_cols = mask.columns.intersection(previous_allocation.columns)
 
         for col in common_cols:
@@ -580,4 +560,19 @@ class Problem:
         self.objective_1_weighting = objective_1_weighting
         self.objective_2_weighting = objective_2_weighting
         self.objective_3_weighting = objective_3_weighting
+
+    # set the time limit for the solver
+    def set_time_limit(self, time_limit: int):
+        self.time_limit = time_limit
+
+    # calculate the new leave allowance for each employee after the allocation
+    def calculate_new_leave_allowance(self, solution):
+
+        # get the number of days off for each employee
+        leave_days = [sum(solution.iloc[i,:]) for i in range(self.num_staff)]
+
+        # calculate the new leave allowance
+        new_leave_allowance = [self.staff_leave_allowance[i] - leave_days[i] for i in range(self.num_staff)]
+
+        return new_leave_allowance
                 

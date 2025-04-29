@@ -73,6 +73,7 @@ def generateStreamlitSolution():
     st.session_state.solution_exists = True
     st.session_state.problem = get_streamlit_parameters()
     st.session_state.problem.set_weightings(st.session_state.preference_weighting, st.session_state.consecutive_days_weighting, st.session_state.remaining_leave_allowance_weighting)
+    st.session_state.problem.set_time_limit(st.session_state.time_limit)
     st.session_state.problem.createModel()
 
     st.session_state.solution_array = []
@@ -198,13 +199,15 @@ with tab2:
 
             st.markdown("#### Solution Parameters")
 
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.number_input("Preference Weighting", min_value=0, value=2, key="preference_weighting")            
             with col2:
                 st.number_input("Consecutive Days Weighting", min_value=0, value=5, key="consecutive_days_weighting")
             with col3:
                 st.number_input("Remaining Leave Allowance Weighting", min_value=0, value=1, key="remaining_leave_allowance_weighting")
+            with col4:
+                st.number_input("Time Limit (seconds)", min_value=1, value=10, key="time_limit")
 
             with st.expander("Add A Previous Allocation"):
 
@@ -219,8 +222,19 @@ with tab2:
 
         else:
 
+            colA, colB = st.columns([1,1], vertical_alignment="center")
+
+            with colA:
+                st.metric("Runtime", value=f"{st.session_state.problem.runtime} seconds", border=True)                
+
+            with colB:
+                st.metric("Solutions Found", value=len(st.session_state.solution_array), border=True)
+                
             if st.button("Reset Solution", use_container_width=True):
-                st.session_state.solution_exists = False
+                    st.session_state.solution_exists = False
+                    st.rerun()
+
+            
 
             for i, solution in enumerate(reversed(st.session_state.solution_array)):
                 st.markdown(f"#### Solution {i+1}")
