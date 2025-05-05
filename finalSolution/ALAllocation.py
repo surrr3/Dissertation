@@ -150,7 +150,7 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
         self.solution_count += 1    
 
-        print(f"Solution {self.solution_count}")
+        # print(f"Solution {self.solution_count}")
 
         # get the solution
         solutionArray = [[self.value(self.leave[(s, d)]) for d in range(self.num_days)] for s in range(self.num_staff)]
@@ -172,12 +172,12 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
         metrics = self.getMetrics(solutionArray=df)
 
-        # explanation = self.explain_solution(solution=df)
+        explanation = self.explain_solution(solution=df)
 
-        # st.session_state.solution_array.append((df_styled,df,metrics, explanation))
+        st.session_state.solution_array.append((df_styled,df,metrics, explanation))
 
-        display(df_styled)
-        print(metrics)
+        # display(df_styled)
+        # print(metrics)
 
         if self.solution_count >= self.solution_limit:
             self.stop_search()
