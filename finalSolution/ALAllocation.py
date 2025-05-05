@@ -62,7 +62,7 @@ class FileParser():
         if len(self.quotas) != 5 or len(self.quotas[0]) != self.num_days:
             raise ValueError("Quota array must have a length of 5, and each row must have the same length as the number of days in the problem")
         
-        self.matrix = [[int(float(x)) for x in row] for row in list(filter(None,data[14:]))]
+        self.matrix = [[int(float(x)) for x in row if x.strip()!=''] for row in list(filter(None,data[14:]))]
 
         if len(self.matrix) != self.num_staff or len(self.matrix[0]) != self.num_days:
             raise ValueError("Allocation matrix must have the same length as the number of staff and days in the problem")
@@ -150,6 +150,8 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
         self.solution_count += 1    
 
+        print(f"Solution {self.solution_count}")
+
         # get the solution
         solutionArray = [[self.value(self.leave[(s, d)]) for d in range(self.num_days)] for s in range(self.num_staff)]
 
@@ -170,9 +172,12 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
         metrics = self.getMetrics(solutionArray=df)
 
-        explanation = self.explain_solution(solution=df)
+        # explanation = self.explain_solution(solution=df)
 
-        st.session_state.solution_array.append((df_styled,df,metrics, explanation))
+        # st.session_state.solution_array.append((df_styled,df,metrics, explanation))
+
+        display(df_styled)
+        print(metrics)
 
         if self.solution_count >= self.solution_limit:
             self.stop_search()
@@ -186,8 +191,9 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         
         preference_leave_days_count = self.preference_matrix.sum().sum()
         assigned_leave_days_count = solutionArray.sum().sum()
+        previous_leave_days_count = self.prev.sum().sum() if self.prev is not None else 0
 
-        metrics["percentage_of_leave_granted"] = f"{(assigned_leave_days_count / preference_leave_days_count) * 100:.2f}%"
+        metrics["percentage_of_leave_granted"] = f"{((assigned_leave_days_count - previous_leave_days_count) / preference_leave_days_count) * 100:.2f}%"
 
         return metrics
     
@@ -538,7 +544,14 @@ class Problem:
     # convert the percentage quotas to the number of staff
     def percent_to_value(self):
 
+        # check if the quotas are already in number of staff
+        
+
         self.daily_quotas_real = self.daily_quotas.copy()
+
+        if self.daily_quotas[0][0] >=1:
+            return
+
 
         # get the number of staff in each grade
         x, counts = np.unique(self.staff_grades, return_counts=True)
