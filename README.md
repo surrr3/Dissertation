@@ -6,10 +6,10 @@ The **Annual Leave Allocation Tool** is an automated annual leave scheduling sol
 ## Technologies Used
 
 - Python 3.10.11
-- [Google OR-Tools CP-SAT Solver](https://developers.google.com/optimization/cp) - constraint programming solver
-- [Pandas](https://pandas.pydata.org/) - used for data handling
-- [Numpy](https://numpy.org/) - used for mathematical operations
-- [Streamlit](https://streamlit.io/) - user interface
+- [Google OR-Tools CP-SAT Solver](https://developers.google.com/optimization/cp) - The chosen Constraint Programming solver.
+- [Pandas](https://pandas.pydata.org/) - Used for displaying solutions as DataFrames.
+- [Numpy](https://numpy.org/) - Used for generating datasets.
+- [Streamlit](https://streamlit.io/) - The library used to create the user interface.
 
 ## Installation
 
@@ -52,23 +52,36 @@ The **Annual Leave Allocation Tool** is an automated annual leave scheduling sol
     streamlit run streamlit_interface.py
     ```
 
-3. A browser window should automatically open, displaying the app's UI. From there, you can generate or upload data, configure parameters and run the solver. 
+3. A browser window should automatically open, displaying the app. From there, you can generate or upload data, configure parameters and run the solver. The URL of the app should be [http://localhost:8501](http://localhost:8501)
+
 
 ## How to use the Tool:
 
 When the browser window starts up, you should see a blank page and a sidebar with controls, similar to the image below:
 
-Using the sidebar, you can either generate data to use within the model, or input a file. 
+![Screenshot 2025-04-30 182032](https://github.com/user-attachments/assets/92a97403-a113-40c4-a044-93cca9f43bc3)
+
+
+Using the sidebar, you can either generate data to use within the model, or input a file.
 
 Once data has been generated or imported, it should appear in the main part of the page, similar to the image below:
 
+![Screenshot 2025-04-30 182106](https://github.com/user-attachments/assets/f942ea5c-de70-4eb9-b268-35bea4e42b95)
+
 You can edit the tables displayed on the page, and edit all values except the number of employees and number of days.
 
-Once you are happy with the parameters, navigate to the Output tab. Here, you can configure additional project parameters and also add a previous annual leave allocation that has been made by the model, if you woult like this to be taken into consideration.
+Once you are happy with the parameters, navigate to the Output tab. Here, you can configure additional project parameters and also add a previous annual leave allocation that has been made by the model, if you would like this to be taken into consideration.
 
 Once you are happy, press the "Solve" button.
 
-After pressing this button, the solver should generate one or more solutions. You can scroll through these solutions and pick the one you like the most. If you want to edit any solutions, click the "Edit Solution" button. Reasons are also given for each solution. 
+![Screenshot 2025-04-30 182217](https://github.com/user-attachments/assets/83de08b5-c2ba-4ceb-9e9c-b8dafcdde9ca)
 
-After editing a solution, clicking "Export" will download a CSV file of the solution for future use. 
 
+After pressing this button, the solver should generate one or more solutions. You can scroll through these solutions and pick the one you like the most. If you want to edit any solutions, click the "Edit Matrix X" button. Reasons are also given for each solution. 
+
+![Screenshot 2025-04-30 182302](https://github.com/user-attachments/assets/5da5f88e-6a59-4391-b99a-a9201478faa6)
+
+
+After editing a solution, clicking "Download CSV" will download a CSV file of the solution for future use. 
+
+![Screenshot 2025-04-30 182319](https://github.com/user-attachments/assets/5542effd-9563-4de6-9b27-9e46140ae993)
